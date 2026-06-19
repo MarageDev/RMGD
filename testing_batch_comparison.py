@@ -90,7 +90,7 @@ for i in range(number_of_images):
     print(f"Execution time: {perf_counter() - s:.5f}s")
     all_sequences.append(results)
 
-    plt.imsave(f"ref_img{i}.png",tensor_to_img(last_result))
+    #plt.imsave(f"ref_img{i}.png",tensor_to_img(last_result))
 
     axes_flat[i].imshow(tensor_to_img(last_result))
 

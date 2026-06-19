@@ -55,7 +55,7 @@ def compare_ref_stack_simple(ref_t: Tensor, comp_t: Tensor):
         
     return final
 
-def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: float = 0.1, smooth_kernel: int = 3):
+def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: float = 0.1, smooth_kernel: int = 3, distance_gradient=True, spatial_weights: torch.Tensor = None, expand_mosaic_visualisation=True):
     N, C, H, W = comp_t.shape
     device = ref_t.device
     
@@ -64,7 +64,15 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
     raw_distances = torch.norm(diff, p=2, dim=1) # Shape: (N, H, W)
     
     # Calculate smoothed distances for spatial voting
-    if smooth_kernel > 1:
+    if spatial_weights is not None:
+        pad = spatial_weights.shape[0] // 2 # spatial_weights (patchsize, patchsize)
+        kernel = spatial_weights.unsqueeze(0).unsqueeze(0).to(device)  # (1, 1, patchsize, patchsize)
+        
+        diff = torch.sum(diff ** 2, dim=1, keepdim=True)
+        smoothed_distances = F.conv2d(diff, kernel, padding=pad).squeeze(1)
+
+    elif smooth_kernel > 1:
+        # if no spatial_weights, use standard uniform average pooling
         pad = smooth_kernel // 2
         smoothed_distances = F.avg_pool2d(
             raw_distances.unsqueeze(1), kernel_size=smooth_kernel, stride=1, padding=pad
@@ -73,8 +81,8 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
         smoothed_distances = raw_distances
 
     # Get the choices from both methods
-    _, best_indices_smooth = torch.min(smoothed_distances, dim=0) # Shape: (H, W)
-    min_raw_distances, best_indices_raw = torch.min(raw_distances, dim=0) # Shape: (H, W)
+    _, best_indices_smooth = torch.min(smoothed_distances, dim=0) # (H, W)
+    min_raw_distances, best_indices_raw = torch.min(raw_distances, dim=0) # (H, W)
     
     #  Check if the smoothed choice passes the threshold
     chosen_raw_smooth = raw_distances.gather(0, best_indices_smooth.unsqueeze(0)).squeeze(0)
@@ -86,6 +94,9 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
     
     final_indices = torch.where(fallback_mask, best_indices_raw, best_indices_smooth)
     final_mask = mask_smooth | mask_raw # Valid if either passes, smooth or raw
+    
+    # Get the final chosen distances for each pixel
+    final_distances = raw_distances.gather(0, final_indices.unsqueeze(0)).squeeze(0)
     
     ####################################
     # Color map of regions
@@ -114,7 +125,11 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
     colors = clr_rg[remapped_indices]
     color = colors.view(H, W, 3).permute(2, 0, 1)
     
-    # Apply the final combined mask
+    if distance_gradient:
+        normalized_distances = torch.clamp(final_distances / threshold, 0, 1)
+        distance_factor = 1.0 - normalized_distances
+        color = color * distance_factor.unsqueeze(0)
+    
     final = torch.where(final_mask.unsqueeze(0), color, final)
     
     #############################
@@ -124,8 +139,9 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
     
     mosaic_final = torch.ones_like(ref_t) # White canvas
     for i in unique_indices:
-        mosaic_final = torch.where(final_indices == i, comp_t[i], mosaic_final)
-    
+        #mosaic_final = torch.where(final_indices == i, comp_t[i], mosaic_final)
+        pixel_mask = (final_indices == i) & (final_mask if expand_mosaic_visualisation else True)
+        mosaic_final = torch.where(pixel_mask.unsqueeze(0), comp_t[i], mosaic_final)
     
     
     return final, mosaic_final

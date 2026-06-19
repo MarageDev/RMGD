@@ -175,8 +175,8 @@ if __name__ == "__main__":
     
     
     
-    plt.imsave(f"nifty_alg_5{1}.png",np.clip((a5[0].permute(0, 2, 3, 1).numpy()[0] + 1) / 2, 0, 1))
-    plt.imsave(f"nifty_alg_5{2}.png",np.clip((a5[-1].permute(0, 2, 3, 1).numpy()[0] + 1) / 2, 0, 1))
+    #plt.imsave(f"nifty_alg_5{1}.png",np.clip((a5[0].permute(0, 2, 3, 1).numpy()[0] + 1) / 2, 0, 1))
+    #plt.imsave(f"nifty_alg_5{2}.png",np.clip((a5[-1].permute(0, 2, 3, 1).numpy()[0] + 1) / 2, 0, 1))
     imgs_to_gif(a5)
     plt.tight_layout()
     plt.imshow(np.clip((a5[-1].permute(0, 2, 3, 1).numpy()[0] + 1) / 2, 0, 1))
