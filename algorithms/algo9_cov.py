@@ -124,7 +124,7 @@ def algo8(D_train, patchsize=3, stride=1, N=50, schedule='linear', device='cpu',
         eigvals, eigvecs = torch.linalg.eigh(local_cov)
     
         thres = 0.1
-        print((eigvals>thres).sum().item())
+        #print((eigvals>thres).sum().item())
         eigvals = (eigvals+(eigvals<thres).float())**-1 * (eigvals>thres).float()
         Lambda = torch.diag_embed(eigvals)
         local_cov_inv = eigvecs @ Lambda @ eigvecs.permute(0, 2, 1)
@@ -159,10 +159,15 @@ def algo8(D_train, patchsize=3, stride=1, N=50, schedule='linear', device='cpu',
             
             # Extraction de patches
             x_patches = extract_centered_patches(x_n1, patchsize, stride=stride).to(device)
+            mu_patches = extract_centered_patches(mu, patchsize, stride=stride)  # (1, C*patchsize^2, H*W)
             
             # Calcul des distances et poids
-            dists = torch.sum((x_patches - Z * t)**2, dim=1)
-            w = torch.softmax(-dists / (2 * ((1 - t) ** 2)), dim=0)
+            diff = (x_patches - Z * t)/(1-t)  - mu_patches   # (N_imgs, C*patchsize^2, H*W)
+            diff_t = diff.permute(0, 2, 1)          # (N_imgs, H*W, C*patchsize^2)
+            tmp = torch.bmm(diff_t.permute(1,0,2) , local_cov_inv).permute(1,0,2)
+            maha = (tmp * diff_t).sum(-1)           # (N_imgs, H*W)
+            w = torch.softmax(-maha / 2, dim=0)
+            #print(f"max weight average: {w.max(dim=0).values.mean().item():.4f}")
             
             v = ((Z - x_patches) * w.unsqueeze(1)).sum(0, keepdim=True) / (1 - t)
             x_patches_updated = x_patches + v * delta_t
@@ -228,7 +233,7 @@ def tensor_to_img(t):
     return ((t.permute(1, 2, 0).cpu().numpy() + 1) / 2, 0, 1)
 
 patchsize = 9
-stride = 3#patchsize//2
+stride = patchsize//2
 mode = "gaussian"
 USE_GPU = True
 
@@ -247,14 +252,18 @@ if __name__ == "__main__":
     dataset_loading_parameters = {
         "data_set_name" : "c",
         "num_samples" : 100,
-        "target_labels" : [4],
-        "image_size" : 16,    
+        "target_labels" : [16],
+        "image_size" : 32,    
     }
     
-    multi_res_tensors = load_multi_res_tensors(dataset_loading_parameters, 3, device)
+    multi_res_tensors = load_multi_res_tensors(dataset_loading_parameters, 2, device)
 
     seed = torch.randint(0,99999999,(1,1))
-    a5 = algo8(multi_res_tensors, patchsize=patchsize, stride=stride, N=50, device=device, mask_weight_type=mode, schedule='linear', renoise_factor=0.2, save_immediatly_to_cpu=False, seed=seed)
+    a5 = algo8(
+        multi_res_tensors, patchsize=patchsize, stride=stride, 
+        N=100, device=device, mask_weight_type=mode, schedule='cosine', 
+        renoise_factor=0.4, save_immediatly_to_cpu=False, seed=seed
+        )
     print(a5[-1].shape)
 
     a5_clean = [img for img in a5 if img is not None]
@@ -283,12 +292,12 @@ if __name__ == "__main__":
     plt.figure(1)
     plt.title("Generated Image")
     plt.imshow(tensor_to_numpy_img((a5_clean[-1].squeeze(0) + 1) / 2))
-    plt.imsave(f"results/algo_9_conv_{seed}.png",tensor_to_numpy_img((a5_clean[-1].squeeze(0)+1)/2))
+    plt.imsave(f"results/algo_9_conv_{seed.item()}.png",tensor_to_numpy_img((a5_clean[-1].squeeze(0)+1)/2))
     
     plt.figure(2)
     plt.title("Patch Regions")
     plt.imshow(tensor_to_numpy_img(comparison[0]))
-    plt.imsave(f"results/algo_9_conv_mask_regions_{seed}.png",tensor_to_numpy_img(comparison[0]))
+    plt.imsave(f"results/algo_9_conv_mask_regions_{seed.item()}.png",tensor_to_numpy_img(comparison[0]))
     
     plt.figure(3)
     plt.title("Mosaic View of Patches")

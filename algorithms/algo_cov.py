@@ -225,7 +225,7 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     torch.cuda.empty_cache()
     device = "cpu" if False else "cuda:0"
-    tensor_file = "tensor_cache_0_24f871758c12de6ba842d73c8c2e3c4361cce6d3d417a6db6dc8e85d1c41b074.pt"
+    tensor_file = "tensor_cache_0_6c8110cc5f05a0d5d7c9ef5accee0294a60a9a3fd9003ff32c4c5ba073bfebe9.pt"
     tensor_path = f"./data/saved_tensors/{tensor_file}"
     data_tensor = torch.load(tensor_path, map_location=device)
     a5 = algo_cov(data_tensor, patchsize=5, N=100, device=device, mask_weight_type="gaussian",schedule='linear', seed=1)
