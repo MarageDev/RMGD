@@ -97,7 +97,7 @@ def algo8(D_train, patchsize=3, stride=1, N=50, schedule='linear', device='cpu',
     # Allouer la mémoire de la liste au début
     total_steps_count = calculate_total_steps(N, scales, renoise_factor)
     saved_steps = [None for _ in range(total_steps_count)] 
-    saved_steps[0] = x_n1.cpu() if save_immediatly_to_cpu else x_n1.clone()
+    
     
     # Précalculer les poids spatiaux
     spatial_weights = get_spatial_weights(patchsize, C, mode=mask_weight_type, device=device)[0]
@@ -105,24 +105,52 @@ def algo8(D_train, patchsize=3, stride=1, N=50, schedule='linear', device='cpu',
     t0  = 0
     step = 0
     for s in range(scales):
+        D_train_resized = D_train[s].to(device)
         H_resized, W_resized =  H * (2**(s)), W * (2**(s))
         
+        # Mat cov calc
+        mu = D_train_resized.mean(dim=(0), keepdim=True) # (1, C, H, W)
+        mu_patches = extract_centered_patches(mu, patchsize, stride=stride) # (1, C*patchsize^2, H*W)
+        pure_noise=0.
+        cov = (1-pure_noise) * (D_train_resized-mu).view(N_imgs, C * H_resized * W_resized).T @ (D_train_resized-mu).view(N_imgs, C * H_resized * W_resized) / N_imgs +pure_noise *torch.eye(C * H_resized * W_resized, device=device) # CHW, CHW
+        
+
+        pos_patches = extract_centered_patches(torch.arange(C*H_resized*W_resized, device=device).view(1, C, H_resized, W_resized)*1.,patchsize,stride=stride) # 1 , c*patchsize**2, HW
+        pos_patches = pos_patches.long()[0] # (C*patchsize^2, H*W)
+        rows = pos_patches.T[:, :, None]
+        cols = pos_patches.T[:, None, :]
+        local_cov = cov[rows, cols] # HW, c*patchsize**2, c*patchsize**2
+        
+        eigvals, eigvecs = torch.linalg.eigh(local_cov)
+    
+        thres = 0.1
+        print((eigvals>thres).sum().item())
+        eigvals = (eigvals+(eigvals<thres).float())**-1 * (eigvals>thres).float()
+        Lambda = torch.diag_embed(eigvals)
+        local_cov_inv = eigvecs @ Lambda @ eigvecs.permute(0, 2, 1)
+        
+        L = torch.linalg.cholesky(cov + 1e-4 * torch.eye(cov.shape[0], device=cov.device))
+        
+        Z = extract_centered_patches(D_train_resized, patchsize, stride=stride) # (N_imgs, C*patchsize^2, H*W)
+        
+
         if s == 0: 
-            D_train_resized = D_train[0].to(device)
             t0 = 0
+            
+            x_noise = (L @ torch.randn(C*H*W, device=device)).view(1, C, H, W) + mu
+            x_n1 = x_noise
+            
             times = make_times(N, schedule, t0=t0)
+            
+            saved_steps[0] = x_n1.cpu() if save_immediatly_to_cpu else x_n1.clone()
         else: 
-            resized_size = (H_resized, W_resized)
-            D_train_resized = D_train[s].to(device)
-            x_n1 = F.interpolate(x_n1, size=resized_size, mode="bicubic").to(device)
+            x_n1 = F.interpolate(x_n1, size=(H_resized, W_resized), mode="bicubic").to(device)
             
             t0 = 1. - renoise_factor
             x_n1 = x_n1 * t0 + torch.randn(x_n1.shape, device=device) * (1. - t0)
 
             times = make_times(int(N * renoise_factor), schedule, t0=t0) 
-            
-        # Extract patches from training data
-        Z = extract_centered_patches(D_train_resized, patchsize, stride=stride).to(device)
+
         
         for it in tqdm(range(times.shape[0]-1), desc=f"Scale {s}/{scales-1}"):
             step += 1
@@ -200,9 +228,9 @@ def tensor_to_img(t):
     return ((t.permute(1, 2, 0).cpu().numpy() + 1) / 2, 0, 1)
 
 patchsize = 9
-stride = 3
+stride = 3#patchsize//2
 mode = "gaussian"
-
+USE_GPU = True
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
@@ -214,13 +242,13 @@ if __name__ == "__main__":
     from algorithms.novelty import *
     torch.cuda.empty_cache()
     
-    device = "cpu" #"cuda:0" if torch.cuda.is_available() else "cpu"
+    device = "cuda:0" if torch.cuda.is_available() and USE_GPU else "cpu"
     
     dataset_loading_parameters = {
         "data_set_name" : "c",
         "num_samples" : 100,
         "target_labels" : [4],
-        "image_size" : 32,    
+        "image_size" : 16,    
     }
     
     multi_res_tensors = load_multi_res_tensors(dataset_loading_parameters, 3, device)

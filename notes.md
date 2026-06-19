@@ -1,7 +1,5 @@
-- Faire l'algo 5 en multi échelle (d'abord avec interpolate puis voir pour faire un stride avec les patchs qu'on calcule à l'initialisation à la place pour de meilleurs résultats)
-
 - Faire une démo permettant de visualiser l'effet des différents paramètres
 
-- faire le truc greycflix
+- voir pour rajouter un random tensor loading à la place qu'il soit sorted, ça pourrait permettre d'avoir de "meilleurs perfs" en ayant toujours un dataset limité, mais qui change 
 
-- voir pour la mémoire et l'optimisation
+- Voir pour ajouter le poisson blending/seamless blending pour les patches

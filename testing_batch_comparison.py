@@ -117,7 +117,7 @@ from algorithms.novelty import *
 image_on_line = 2
 number_of_images = image_on_line * lines
 
-fig, axes = plt.subplots(lines, image_on_line * 2, figsize=(image_on_line * lines, 8))
+fig, axes = plt.subplots(lines, image_on_line * 2, figsize=(image_on_line * lines, 8), squeeze=False)
 
 for i in range(number_of_images):
     
