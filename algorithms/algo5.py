@@ -127,10 +127,10 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     torch.cuda.empty_cache()
     device = "cpu" if False else "cuda:0"
-    tensor_file = "tensor_cache_0_24f871758c12de6ba842d73c8c2e3c4361cce6d3d417a6db6dc8e85d1c41b074.pt"
+    tensor_file = "tensor_cache_0_9905840eee87d2da9e032f2c96eee9ce0a1743a4acad78f534f992ebd0eadbf7.pt"
     tensor_path = f"./data/saved_tensors/{tensor_file}"
     data_tensor = torch.load(tensor_path, map_location=device)
-    a5 = algo5(data_tensor, patchsize=5, N=100, device=device, mask_weight_type="gaussian",schedule='linear', seed=1)
+    a5 = algo5(data_tensor, patchsize=11, N=100, device=device, mask_weight_type="gaussian",schedule='linear', seed=1)
     
     
     

@@ -96,24 +96,24 @@ class LooseCelebA(CelebA): # Force check integrity to true because pytorch keeps
     def _check_integrity(self) -> bool:
         return True
 
-def load_celeba(root='./data', split='train', num_samples=None, target_labels=None, match_any=False, image_size=64, **kwargs):
+def load_celeba(root='./data', split='train', num_samples=None, target_labels=None, match_any=False, image_size=64, normalize=True,**kwargs):
+    from tqdm import tqdm
     if image_size is not None : 
         transform = transforms.Compose([
             transforms.Resize(image_size), 
             transforms.CenterCrop(image_size),
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     else : 
         transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
-
+    if normalize : transform = transforms.Compose([*transform.transforms, transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    
     dataset = LooseCelebA(root=root, split=split, download=False, transform=transform)
     
     images = []
-    for i in range(len(dataset)):
+    for i in tqdm(range(len(dataset)), "Searching through celeba"):
         img, attrs = dataset[i]
         
         # If no attributes are specified, get everything
@@ -183,28 +183,28 @@ def load_jpg_folder(root='./data', num_samples=None, image_size=None, **kwargs):
 import io
 import pandas as pd
 
-def load_parquet(root="./data", num_samples=None, image_size=None, **kwargs):
+def load_parquet(root="./data", num_samples=None, image_size=None, normalize=False,**kwargs):
     """
     - root : Can either be a filepath or a URL (based on doc but most of the time there're too much requests so it fails)
     """
-    
+
     df = pd.read_parquet(root)
     if num_samples is not None:
         df = df.head(num_samples)
-    
+
     if image_size is not None : 
         transform = transforms.Compose([
             transforms.Resize(image_size), 
             transforms.CenterCrop(image_size),
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) # TODO
         ])
     else : 
         transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
-    
+    if normalize : transform = transforms.Compose([*transform.transforms, transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     images = []
 
     for _, row in df.iterrows():
@@ -245,13 +245,15 @@ def load_parquet_attr(root="./data", num_samples=None, image_size=None, **kwargs
             transforms.Resize(image_size), 
             transforms.CenterCrop(image_size),
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) # TODO
         ])
     else : 
         transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
+        
+        
     
     images = []
 

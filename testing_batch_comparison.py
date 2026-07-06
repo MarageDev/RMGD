@@ -137,7 +137,7 @@ for i in range(number_of_images):
     ax_ref.imshow(ref_img_np)
     ax_ref.set_title(f"Algo {i//2 + 1} Output ({i})")
     ax_ref.axis('off')
-    
+
     # Display Masked Image
     ax_mask.imshow(tensor_to_numpy_img(comparison))
     ax_mask.set_title(f"Mask {i}")

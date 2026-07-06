@@ -71,18 +71,18 @@ def make_times(n_timestep, schedule='cosine', t0=0):
         times = times / times[-1]
     return times
 
-def calculate_total_steps(N, upsamples, renoise_factor):
+def calculate_total_steps(N, upsamples, renoise_time):
     total_steps = 1
     for s in range(upsamples):
         if s == 0:
             total_steps += N
         else:
-            n_steps_upsampled = int(N * renoise_factor)
+            n_steps_upsampled = int(N * renoise_time)
             total_steps += n_steps_upsampled
     return total_steps
 
 @torch.no_grad()
-def algo8(D_train, patchsize=3, stride=1, N=50, schedule='linear', device='cpu', mask_weight_type="standard", renoise_factor=0.1, save_immediatly_to_cpu=True, seed=None):
+def algo8(D_train, patchsize=3, stride=1, N=50, schedule='linear', device='cpu', mask_weight_type="standard", renoise_time=0.1, save_immediatly_to_cpu=True, seed=None):
     if seed is not None:
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
@@ -95,7 +95,7 @@ def algo8(D_train, patchsize=3, stride=1, N=50, schedule='linear', device='cpu',
     x_n1 = x_noise.clone()
     
     # Allouer la mémoire de la liste au début
-    total_steps_count = calculate_total_steps(N, scales, renoise_factor)
+    total_steps_count = calculate_total_steps(N, scales, renoise_time)
     saved_steps = [None for _ in range(total_steps_count)] 
     
     
@@ -122,7 +122,7 @@ def algo8(D_train, patchsize=3, stride=1, N=50, schedule='linear', device='cpu',
             
             pure_noise=.0
             cov = (1-pure_noise) * (D_train_resized-mu).view(N_imgs, C * H_resized * W_resized).T @ (D_train_resized-mu).view(N_imgs, C * H_resized * W_resized) / N_imgs +pure_noise *torch.eye(C * H_resized * W_resized, device=device) # CHW, CHW
-            L = torch.linalg.cholesky(cov + 1e-4 * torch.eye(cov.shape[0], device=cov.device))
+            L = torch.linalg.cholesky(cov + 1e-3 * torch.eye(cov.shape[0], device=cov.device))
             
 
             pos_patches = extract_centered_patches(torch.arange(C*H_resized*W_resized, device=device).view(1, C, H_resized, W_resized)*1.,patchsize,stride=stride) # 1 , c*patchsize**2, HW
@@ -155,10 +155,10 @@ def algo8(D_train, patchsize=3, stride=1, N=50, schedule='linear', device='cpu',
         else: 
             x_n1 = F.interpolate(x_n1, size=(H_resized, W_resized), mode="bicubic").to(device)
             
-            t0 = 1. - renoise_factor
+            t0 = 1. - renoise_time # TODO changement de renoise_factor a renoise time
             x_n1 = x_n1 * t0 + torch.randn(x_n1.shape, device=device) * (1. - t0)
 
-            times = make_times(int(N * renoise_factor), schedule, t0=t0) 
+            times = make_times(int(N * renoise_time), schedule, t0=t0) 
 
             Z = extract_centered_patches(D_train_resized, patchsize, stride=stride) # (N_imgs, C*patchsize^2, H*W)
         for it in tqdm(range(times.shape[0]-1), desc=f"Scale {s}/{scales-1}"):
@@ -268,7 +268,7 @@ if __name__ == "__main__":
     
     dataset_loading_parameters = {
         "data_set_name" : "c",
-        "num_samples" : 400,
+        "num_samples" : 10,
         "target_labels" : [],
         "image_size" : 32,    
     }
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     a5 = algo8(
         multi_res_tensors, patchsize=patchsize, stride=stride, 
         N=50, device=device, mask_weight_type=mode, schedule='linear', 
-        renoise_factor=0.2, save_immediatly_to_cpu=False, seed=seed
+        renoise_time=0.2, save_immediatly_to_cpu=False, seed=seed
         )
     print(a5[-1].shape)
 

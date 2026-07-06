@@ -37,8 +37,9 @@ def img_to_tensor(path):
     return transform(img)
 
 def tensor_to_numpy_img(tensor:Tensor):
-    return np.clip(tensor.permute(1, 2, 0).cpu().numpy(), 0, 1)
+    return np.clip(tensor.permute(1, 2, 0).cpu().detach().numpy(), 0, 1)
 
+@torch.no_grad()
 def compare_ref_stack_simple(ref_t: Tensor, comp_t: Tensor):
     
     final = torch.ones_like(ref_t).to('cuda:0') # White canvas (3, H, W)
@@ -55,6 +56,7 @@ def compare_ref_stack_simple(ref_t: Tensor, comp_t: Tensor):
         
     return final
 
+@torch.no_grad()
 def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: float = 0.1, smooth_kernel: int = 3, distance_gradient=True, spatial_weights: torch.Tensor = None, expand_mosaic_visualisation=True):
     N, C, H, W = comp_t.shape
     device = ref_t.device
@@ -77,6 +79,7 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
         smoothed_distances = F.avg_pool2d(
             raw_distances.unsqueeze(1), kernel_size=smooth_kernel, stride=1, padding=pad
         ).squeeze(1)
+    
     else:
         smoothed_distances = raw_distances
 
@@ -98,6 +101,14 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
     # Get the final chosen distances for each pixel
     final_distances = raw_distances.gather(0, final_indices.unsqueeze(0)).squeeze(0)
     
+    ##################################
+    # Retrieve the predominant image
+    ##################################
+    counts:tuple[torch.Tensor,torch.Tensor] = final_indices.unique(return_counts=True)
+    predominant_tensor_idx = counts[0][counts[1].argmax()]
+    
+    
+    
     ####################################
     # Color map of regions
     ######################################
@@ -108,7 +119,6 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
     ### Color range calibration (ot get higher contrast of colors with only a separation of the spectrum based  on the number of patches)
 
     mask_pathces_nb = final_indices.unique().shape[0]# retrieve the number of mask patches
-    #print(mask_pathces_nb)
     
     clr_rg = torch.tensor(get_color_range(mask_pathces_nb), dtype=torch.float32, device=device)
 
@@ -130,6 +140,7 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
         distance_factor = 1.0 - normalized_distances
         color = color * distance_factor.unsqueeze(0)
     
+    
     final = torch.where(final_mask.unsqueeze(0), color, final)
     
     #############################
@@ -143,17 +154,66 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
         pixel_mask = (final_indices == i) & (final_mask if expand_mosaic_visualisation else True)
         mosaic_final = torch.where(pixel_mask.unsqueeze(0), comp_t[i], mosaic_final)
     
+    ################################
+    # Display the areas where the predominant image is
+    ###################################################
     
-    return final, mosaic_final
+    mosaic_predom = torch.ones_like(ref_t) # White canvas
+    pixel_mask = (final_indices == predominant_tensor_idx) & (final_mask if expand_mosaic_visualisation else True)
+    mosaic_predom = torch.where(pixel_mask.unsqueeze(0), comp_t[predominant_tensor_idx], mosaic_predom)
+    
+    
+    ################################
+    # Display the areas where the predominant centor of interest(coi) image is (searching in a centered rect to search for faces)
+    # + mosaic of coi
+    ###################################################
+    
+    w_ratio = 0.5
+    h_ratio = 0.7
+    #0.25 0.75
+    h_start, h_end = int(H * (1.-h_ratio)/2.), int(H * ((h_ratio + 1.)/2.))
+    w_start, w_end = int(W * (1.-w_ratio)/2.), int(W * ((w_ratio + 1.) /2.))
+    
+    
+    # Slice the final indices to only look at that central rect
+    sliced_final_indices = final_indices[h_start:h_end, w_start:w_end]
 
-
+    counts: tuple[torch.Tensor, torch.Tensor] = sliced_final_indices.unique(return_counts=True)
+    predominant_coi_tensor_idx = counts[0][counts[1].argmax()]
+    
+    mosaic_coi_predom = torch.ones_like(ref_t) # White canvas
+    pixel_mask_coi = (final_indices == predominant_coi_tensor_idx) & (final_mask if expand_mosaic_visualisation else True)
+    mosaic_coi_predom = torch.where(pixel_mask_coi.unsqueeze(0), comp_t[predominant_coi_tensor_idx], mosaic_coi_predom)
+    
+    predom_coi_image  = comp_t[predominant_coi_tensor_idx]
+    brightness = 0.6
+    predom_coi_image[:, h_start:h_end, w_start:w_end] = predom_coi_image[:, h_start:h_end, w_start:w_end]*brightness + (1.- brightness)
+    
+    return final, mosaic_final, comp_t[predominant_tensor_idx], mosaic_predom, predom_coi_image, mosaic_coi_predom, normalized_distances.unsqueeze(0)
+    #       0       1           2                               3               4                       5               6
 
 if __name__ == "__main__":
-    data_tensor = torch.load("data/saved_tensors/tensor_cache_0_753d59e7eabbd4e889a6cb0f4c4c414b164c3f063897b7732606ec6e138a0f0a.pt", map_location='cuda:0')
+    data_tensor = torch.load("./data/cached_tensors/dataset/tensor_dataset_4f4934b05986be2050108a794ee35105e817d299f3981f0327a61b052bd6c589.pt", map_location='cuda:0')
 
-    fig, ax = plt.subplots(2, 1, figsize=(3, 3))
+    fig = plt.figure(layout="constrained")
+    layout = """
+    SSCPI
+    SSMDO
+    """
+    
+    axs = fig.subplot_mosaic(mosaic=layout)
     ref_tensor = img_to_tensor("novelty_test.jpg").to('cuda:0')
-    ax[0].imshow(tensor_to_numpy_img(compare_ref_stack(ref_tensor,data_tensor,smooth_kernel=1,threshold=0.1)))
-
-    ax[1].imshow(tensor_to_numpy_img((ref_tensor +1)/2))
+    comp = compare_ref_stack(ref_tensor,data_tensor,
+                             smooth_kernel=5,threshold=0.2, 
+                             distance_gradient=True, spatial_weights=None)
+    
+    axs["S"].imshow(tensor_to_numpy_img((ref_tensor +1)/2)) # synthesis
+    
+    axs["C"].imshow(tensor_to_numpy_img(comp[0])) # patches
+    
+    axs["M"].imshow(tensor_to_numpy_img(comp[1])) # mosaic of ref images
+    axs["P"].imshow(tensor_to_numpy_img(comp[2])) # predominant image
+    axs["D"].imshow(tensor_to_numpy_img(comp[3])) # predom mosaic
+    axs["I"].imshow(tensor_to_numpy_img(comp[4])) # predom coi image
+    axs["O"].imshow(tensor_to_numpy_img(comp[5])) # predom coi mosaic
     plt.show()

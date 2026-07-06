@@ -72,17 +72,40 @@ def load_data_to_tensor(override_path:str, data_dir:str = "./data", dataset_load
         
         print(f"{cache_dir}/{tensor_file_name}")
         torch.save(data_tensor, f"{cache_dir}/{tensor_file_name}")
-    return data_tensor
-    
-def has_corresponding_tensor_hash(tensor_dir_path, target_hash) -> tuple:
+    associated_hash = current_param_hash
+    return data_tensor, associated_hash
+
+
+def has_corresponding_tensor_hash(tensor_dir_path, target_hash, additional_req=None) -> tuple:
     # Try to retrieve a saved tensor path with the corresponding parameter hash
     import os
-    for f in os.listdir(tensor_dir_path):
-        c = [ i.split(".") for i in f.split("_")][-1][0] #retrieve hash, last list, first item
-        if str(c) == str(target_hash):
-            return (True, f)
+    if additional_req == None :
+        for f in os.listdir(tensor_dir_path):
+            c = [ i.split(".") for i in f.split("_")][-1][0] #retrieve hash, last list, first item
+            if str(c) == str(target_hash):
+                return (True, f)
+    else : 
+        for f in os.listdir(tensor_dir_path):
+            c = [ i.split(".") for i in f.split("_")][-1][0] #retrieve hash, last list, first item
+            if str(c) == str(target_hash) and additional_req in f:
+                return (True, f)
     return (False, None)
 
+def save_or_load_if_hash(tensor,data_dir="./data",hash=None, device="cuda"):
+    cache_dir = f"{data_dir}/saved_tensors"
+    os.makedirs(cache_dir, exist_ok=True)
+    
+    load_from_cache = False
+    search_result = ()
+    current_param_hash = hash
+    if load_from_cache: # Load tensor from an already created cached tensor file
+        data_tensor = torch.load(f"{cache_dir}/{search_result[1]}", map_location=device)
+        return data_tensor
+    else: # Create a new cache tensor file
+        tensor_file_name = f"tensor_cache_encoded_{str(current_param_hash)}.pt"
+        torch.save(data_tensor, f"{cache_dir}/{tensor_file_name}")
+        return data_tensor
+    
 def save_dict_hash(d):
     from hashlib import sha256
     return sha256(str(d.items()).encode()).hexdigest()

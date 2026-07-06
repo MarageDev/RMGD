@@ -171,7 +171,7 @@ if __name__ == "__main__":
     tensor_path = f"./data/saved_tensors/{tensor_file}"
     data_tensor = torch.load(tensor_path, map_location=device)
     print(data_tensor.shape)
-    a5 = algo6(data_tensor, patchsize=9, N=50, device=device, mask_weight_type="gaussian",schedule='linear', upsamples=2, renoise_factor=0.1,seed=3)
+    a5 = algo6(data_tensor, patchsize=9, N=50, device=device, mask_weight_type="",schedule='linear', upsamples=2, renoise_factor=0.1,seed=3)
     
     
     
