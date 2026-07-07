@@ -178,20 +178,62 @@ def load_jpg_folder(root='./data', num_samples=None, image_size=None, **kwargs):
     
     return batch_tensor.to('cpu')
 
+import os
+import torch
+import torchvision.io as tv_io
+import torchvision.transforms.functional as TF
 
+def load_jpg_folder_torch(root='./data', num_samples=None, image_size=None, normalize=False,**kwargs):
+    # Extract all jpg files and sort them alphabetically
+    all_files = sorted([f for f in os.listdir(root) if f.lower().endswith(('.jpg', '.jpeg'))])
+    
+    # Slice the list to get only the first X files
+    if num_samples is not None:
+        all_files = all_files[:num_samples]
+        
+    images = []
+    
+    # Load, transform, and collect
+    for f_name in all_files:
+        file_path = os.path.join(root, f_name)
+        try:
+            img_tensor = tv_io.decode_image(file_path, mode="RGB")
+
+            if image_size is not None: # resize if specified
+                img_tensor = TF.resize(img_tensor, image_size, antialias=True)
+            
+            images.append(img_tensor.float())
+            
+        except Exception as e:
+            print(f"Skipping {f_name} due to error: {e}")
+            
+    if not images:
+        raise ValueError(f"No JPG images found in {root}")
+
+    batch_tensor = torch.stack(images)
+    
+    if normalize : batch_tensor = (batch_tensor / 255.0) * 2. - 1.
+    
+    return batch_tensor.to('cpu')
 
 import io
 import pandas as pd
 
+@torch.no_grad()
 def load_parquet(root="./data", num_samples=None, image_size=None, normalize=False,**kwargs):
     """
     - root : Can either be a filepath or a URL (based on doc but most of the time there're too much requests so it fails)
     """
 
+    from tqdm import tqdm
+    print('ahhhhhhhhhhh')
     df = pd.read_parquet(root)
+    print("b")
     if num_samples is not None:
         df = df.head(num_samples)
-
+    
+    max_rows = num_samples if num_samples is not None else len(df.index)
+    print(max_rows)
     if image_size is not None : 
         transform = transforms.Compose([
             transforms.Resize(image_size), 
@@ -207,7 +249,7 @@ def load_parquet(root="./data", num_samples=None, image_size=None, normalize=Fal
     if normalize : transform = transforms.Compose([*transform.transforms, transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     images = []
 
-    for _, row in df.iterrows():
+    for _, row in tqdm(df.iterrows(), desc="Loading dataset", total=max_rows, miniters=1, mininterval=10):
         try:
             # Hugging Face stores images as a dictionary entry with a 'bytes' key
             img_data = row['image']
@@ -226,7 +268,7 @@ def load_parquet(root="./data", num_samples=None, image_size=None, normalize=Fal
 
     return torch.stack(images).to('cpu')
 
-
+@torch.no_grad()
 def load_parquet_attr(root="./data", num_samples=None, image_size=None, **kwargs):
     """
     - root : Can either be a filepath or a URL (based on doc but most of the time there're too much requests so it fails)

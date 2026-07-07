@@ -14,7 +14,7 @@ from tgmm import GaussianMixture as GaussianMixtureGPU
 class PCAGMMFaceGenerator:
     from typing import Self
     
-    def __init__(self, pca_A_dim:int=256, gmm_components:int=25, seed:int = None,device:str="cuda:0") -> None:
+    def __init__(self, pca_A_dim:int=256, gmm_components:int=25, pca_iter:int = 100, gmm_init_iter:int = 100, seed:int = None,device:str="cuda:0") -> None:
         
         
         self.pca_A_dim = pca_A_dim
@@ -22,6 +22,8 @@ class PCAGMMFaceGenerator:
         self.device = device
         self.seed = seed
         
+        self.pca_iter = 100
+        self.gmm_init_iter = 100
         # State vars
         self.mean = None
         self.V = None
@@ -40,7 +42,7 @@ class PCAGMMFaceGenerator:
         self.mean = flattened.mean(dim=0, keepdim=True).to(self.device)
         
         # PCA to pca_A_dim dimensions
-        U, S, self.V = torch.pca_lowrank(flattened - self.mean, q=self.pca_A_dim, center=True, niter=100) # TODO : nombre iteration ++
+        U, S, self.V = torch.pca_lowrank(flattened - self.mean, q=self.pca_A_dim, center=True, niter=self.pca_iter) 
         pca_features = (flattened - self.mean) @ self.V
 
         # Fit GMM on PCA
@@ -49,7 +51,7 @@ class PCAGMMFaceGenerator:
             n_features=self.pca_A_dim, 
             max_iter=1000,
             reg_covar=1e-3, 
-            n_init=5, 
+            n_init=self.gmm_init_iter, 
             device=self.device,
             random_state=self.seed
         )
@@ -95,7 +97,9 @@ class PCAGMMFaceGenerator:
             'gmm': self.gmm,
             'image_shape': self.image_shape,
             'pca_A_dim': self.pca_A_dim,
-            'gmm_components': self.gmm_components
+            'gmm_components': self.gmm_components,
+            'pca_iter' : self.pca_iter,
+            'gmm_init_iter' : self.gmm_init_iter
         }
         
         return state
@@ -108,7 +112,9 @@ class PCAGMMFaceGenerator:
             'gmm': self.gmm,
             'image_shape': self.image_shape,
             'pca_A_dim': self.pca_A_dim,
-            'gmm_components': self.gmm_components
+            'gmm_components': self.gmm_components,
+            'pca_iter' : self.pca_iter,
+            'gmm_init_iter' : self.gmm_init_iter
         }
         torch.save(state, filepath)
         print(f"Model saved to {filepath}")
@@ -122,6 +128,8 @@ class PCAGMMFaceGenerator:
         generator = cls(
             pca_A_dim=state['pca_A_dim'], 
             gmm_components=state['gmm_components'], 
+            pca_iter= state['pca_iter'], 
+            gmm_init_iter = state['gmm_init_iter'],
             device=device
         )
         
@@ -135,10 +143,12 @@ class PCAGMMFaceGenerator:
 
 DEFAULT_PCAGMM_SETTINGS = {
     "PCA_dim": 256,
-    "GMM_comp": 5
+    "GMM_comp": 5,
+    "PCA_ITER":100, 
+    "GMM_INIT_ITER":100
 }
 
-def quick_create_model(fitting_data_tensor:tuple[str,torch.TensorType],settings:dict = {"PCA_dim": 256,"GMM_comp": 5},search_dir:str="./data/cached_tensors/pcagmm",save_path:str="./data/cached_tensors/pcagmm", force_rewrite:bool=False, seed:int=None,device:str="cuda:0") -> PCAGMMFaceGenerator:
+def quick_create_model(fitting_data_tensor:tuple[str,torch.TensorType],settings:dict = {"PCA_dim": 256,"GMM_comp": 5, "PCA_ITER":100, "GMM_INIT_ITER":100},search_dir:str="./data/cached_tensors/pcagmm",save_path:str="./data/cached_tensors/pcagmm", force_rewrite:bool=False, seed:int=None,device:str="cuda:0") -> PCAGMMFaceGenerator:
     """
     Create a PCAGMM Face generator (class PCAGMMFaceGenerator) from either an already existing file matching the settings of the generator entered, or by creating one fitted to `fitting_data_tensor` and saving it.
     
@@ -163,8 +173,6 @@ def quick_create_model(fitting_data_tensor:tuple[str,torch.TensorType],settings:
     load_from_cache, existant_file_path = ls.has_corresponding_reqs(search_dir, requirements)
     can_load = not force_rewrite and load_from_cache
     
-    print(load_from_cache)
-    
     data_tensor = None
 
     if can_load:
@@ -174,7 +182,7 @@ def quick_create_model(fitting_data_tensor:tuple[str,torch.TensorType],settings:
         
         return generator
     else:
-        generator = PCAGMMFaceGenerator(pca_A_dim=settings["PCA_dim"], gmm_components=settings["GMM_comp"], device="cuda:0")
+        generator = PCAGMMFaceGenerator(pca_A_dim=settings["PCA_dim"], gmm_components=settings["GMM_comp"], pca_iter=settings["PCA_ITER"],gmm_init_iter=["GMM_INIT_ITER"],device="cuda:0")
         generator.seed = seed
         generator.fit(dataset_tensor)
         generator_state = generator.get_save_state()
@@ -224,13 +232,14 @@ if __name__ == "__main__" :
     plt.rcdefaults()
     dataset_loading_parameters = {
         "data_set_name" : "chq",
-        "num_samples" : 500,
+        "num_samples" : 100,
         "target_labels" : [],
         "image_size" : 512,    
         "normalize" : False,
     }
     device = "cpu" if False else "cuda:0"
     hash = save_dict_hash(dataset_loading_parameters)
+    from dataset_loader import load_parquet
     # Load Data
     data_tensor = ls_with_cache_file_tensor_dataset(search_dir="./data/cached_tensors/dataset", 
                                                     data_dir="./data", force_rewrite=False,

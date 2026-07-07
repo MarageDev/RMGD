@@ -24,6 +24,7 @@ def has_corresponding_reqs(tensor_dir_path:str, requirements:list=[]) -> tuple[b
             return (True, f)
     return (False, None)
 
+@torch.no_grad()
 def ls_with_cache_file_tensor(search_dir:str="./data/saved_tensors", preprocess_tensor_function:callable = None, tensor_to_save:torch.Tensor | dict = None, save_appendix:str=None,force_rewrite:bool = False, device="cpu", requirements:list = []) -> torch.Tensor:
     """
     Seach in `search_dir` for already existant file matching the requirements (`*requirements`). 
@@ -52,7 +53,7 @@ def ls_with_cache_file_tensor(search_dir:str="./data/saved_tensors", preprocess_
         
     return data_tensor
 
-
+@torch.no_grad()
 def load_dataset(data_dir:str = "./data", dataset_loading_parameters:dict = None, device="cpu") -> torch.Tensor:
     
     """ 
@@ -106,7 +107,7 @@ def load_dataset(data_dir:str = "./data", dataset_loading_parameters:dict = None
     
     return data_tensor
 
-
+@torch.no_grad()
 def ls_with_cache_file_tensor_dataset(search_dir:str="./data/saved_tensors", data_dir:str = "./data",dataset_parameters:dict = None, preprocess_tensor_function:callable = None, force_rewrite:bool = False, save_appendix:str= "dataset" , requirements:list = [], device="cpu") -> torch.Tensor:
     """
     Seach in `search_dir` for already existant file matching the requirements and the hash from `dataset_parameters` (`requirements`). 

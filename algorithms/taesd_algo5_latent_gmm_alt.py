@@ -1,3 +1,5 @@
+# Based on algorithm 5 but in latent space of TAESD
+
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -16,32 +18,30 @@ PATCHSIZE = 8
 STRIDE = PATCHSIZE//2
 ITERATIONS = 30
 
-INITIAL_NOISE_FACTOR = 0.
+INITIAL_NOISE_FACTOR = 0.5
 
-SEED = 15
+SEED = None
 
 
 OUTPUT_RGB_GIF = True
-OUTPUT_LATENT_GIF = True
+OUTPUT_LATENT_GIF = False
 
 REWRITE_ALL_TENSOR_FILES = False
 
 dataset_loading_parameters = {
     "data_set_name" : "chq",
-    "num_samples" : 512,
+    "num_samples" : 100,
     "target_labels" : [],
     "image_size" : 512,    
     "normalize" : False,
 }
 
 PCAGMM_SETTINGS = {
-    "PCA_dim":128,
-    "GMM_comp":5
+    "PCA_dim": 256,
+    "GMM_comp": 5,
+    "PCA_ITER":100, 
+    "GMM_INIT_ITER":5
 }
-
-
-# Stable Diffusion latent scaling factor https://github.com/huggingface/diffusers/issues/437 https://github.com/huggingface/diffusers/blob/b2b3b1a8ab83b020ecaf32f45de3ef23644331cf/examples/textual_inversion/textual_inversion.py#L501 
-SD_LATENT_SCALE = 0.18
 
 @torch.no_grad()
 def extract_centered_patches(img, patchsize):
@@ -258,7 +258,7 @@ def main():
     
     final_result_lat = results_lat[-1]
     final_result_rgb = decode_tensor(final_result_lat.to(device), taesd)
-
+    
     # GIF CREATION (SLOW TO GENERATE)
     if OUTPUT_RGB_GIF : imgs_to_gif("out_a5_latent_gmm.gif",[decode_tensor(i.to(device), taesd).cpu() for i in results_lat])
     if OUTPUT_LATENT_GIF : imgs_to_gif_encode(results_lat)
@@ -269,59 +269,55 @@ def main():
         ['synth', 'synth', 'init',      'mosaic',       "predom_mosaic",    "coi_mosaic"],
         ['synth', 'synth', 'patches',   'novelty_dist', "predom",           "coi"       ]
     ])
-
+    # print(final_result_lat.shape, final_result_rgb.shape)
     axs["synth"].set_title("Result")
     axs["synth"].imshow(TF.to_pil_image(final_result_rgb[0].cpu().detach().clamp(0,1)))
     axs["synth"].axis("off")
     
+    axs["init"].set_title("Initialisation")
+    axs["init"].imshow(TF.to_pil_image(decode_tensor(x_1.to(device), taesd).cpu()[0].detach().clamp(0,1)))
+    axs["init"].axis("off")
+
     comparison = compare_ref_stack(
-        final_result_rgb.squeeze(0).to(device), 
-        data_tensor.to(device),
-        threshold=0.1, 
+        final_result_lat[0].to(device), 
+        encoded_tensor.to(device),
+        threshold=0.2, 
         distance_gradient=True,
         spatial_weights=None,
         smooth_kernel=PATCHSIZE+1
     )
     
-    # comparison = compare_ref_stack(
-    #     final_result_lat.squeeze(0).to(device), 
-    #     encoded_tensor.to(device),
-    #     threshold=0.1, 
-    #     distance_gradient=True,
-    #     spatial_weights=None,
-    #     smooth_kernel=PATCHSIZE+1
-    # )
-    
+    def quick_decode(x):
+        return decode_tensor(x.unsqueeze(0).to(device), taesd).cpu()
+
+    quick_image_decode = lambda x : tensor_to_numpy_img(quick_decode(x)[0])
+
     axs["patches"].set_title("Patch Regions")
-    axs["patches"].imshow(tensor_to_numpy_img(comparison[0].detach()))
+    axs["patches"].imshow(tensor_to_numpy_img(comparison[0]))
     axs["patches"].axis("off")
     
     axs["mosaic"].set_title("Mosaic View of Patches")
-    axs["mosaic"].imshow(tensor_to_numpy_img(comparison[1].detach()))
+    axs["mosaic"].imshow(quick_image_decode(comparison[1]))
     axs["mosaic"].axis("off")
-        
-    axs["init"].set_title("Initialisation (converted to RGB space)")
-    axs["init"].imshow(TF.to_pil_image(decode_tensor(x_1.to(device), taesd).cpu()[0].detach().clamp(0,1)))
-    axs["init"].axis("off")
 
     axs["predom"].set_title("Predominant")
-    axs["predom"].imshow(tensor_to_numpy_img(comparison[2].detach()))
+    axs["predom"].imshow(quick_image_decode(comparison[2]))
     axs["predom"].axis("off")
     
     axs["predom_mosaic"].set_title("Predominant mosaic")
-    axs["predom_mosaic"].imshow(tensor_to_numpy_img(comparison[3].detach()))
+    axs["predom_mosaic"].imshow(quick_image_decode(comparison[3]))
     axs["predom_mosaic"].axis("off")
     
     axs["coi"].set_title("COI")
-    axs["coi"].imshow(tensor_to_numpy_img(comparison[4].detach()))
+    axs["coi"].imshow(quick_image_decode(comparison[4]))
     axs["coi"].axis("off")
     
     axs["coi_mosaic"].set_title("COI mosaic")
-    axs["coi_mosaic"].imshow(tensor_to_numpy_img(comparison[5].detach()))
+    axs["coi_mosaic"].imshow(quick_image_decode(comparison[5]))
     axs["coi_mosaic"].axis("off")
     
     axs["novelty_dist"].set_title("Novelty dist")
-    axs["novelty_dist"].imshow(tensor_to_numpy_img(comparison[6].detach()))
+    axs["novelty_dist"].imshow(tensor_to_numpy_img(comparison[6]))
     axs["novelty_dist"].axis("off")
     
     plt.imsave("novelty_test.jpg",TF.to_pil_image(final_result_rgb[0].cpu().detach().clamp(0,1)))
