@@ -47,7 +47,7 @@ def ls_with_cache_file_tensor(search_dir:str="./data/saved_tensors", preprocess_
     else:
         data_tensor = tensor_to_save.to(device) if preprocess_tensor_function == None else preprocess_tensor_function(tensor_to_save.to(device))
         
-        tensor_file_name = f"tensor_{(save_appendix + "_" )if all (save_appendix != i for i in [None, ""]) else ""}{"_".join([*requirements])}.pt" 
+        tensor_file_name = f"tensor_{(save_appendix + "_" )if all (save_appendix != i for i in [None, ""]) else ""}{"_".join(requirements)}.pt" 
         torch.save(data_tensor, f"{search_dir}/{tensor_file_name}")
         print(f"Saved tensor at {search_dir}/{tensor_file_name}")
         
@@ -99,6 +99,7 @@ def load_dataset(data_dir:str = "./data", dataset_loading_parameters:dict = None
         case "mnist"    | "m"  : loading_func = dataset_loader.load_mnist           ;    root_appendix = None
         case "afhq"     | "af" : loading_func = dataset_loader.load_parquet_attr    ;    root_appendix = "afhq"
         case "celebahq" | "chq": loading_func = dataset_loader.load_parquet         ;    root_appendix = "celebahq"
+        case "celebahq_jpg" | "chq_jpg": loading_func = dataset_loader.load_jpg_folder_torch         ;    root_appendix = "celebahq_jpg"
     
     dataset_loading_parameters["root"] = f"{data_dir}/{root_appendix}" if root_appendix else f"{data_dir}"
 

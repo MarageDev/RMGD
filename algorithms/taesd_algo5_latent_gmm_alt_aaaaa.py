@@ -13,11 +13,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ae.taesd.taesd import TAESD
 
-PATCHSIZE = 8
-STRIDE = PATCHSIZE//2
-ITERATIONS = 30
+PATCHSIZE = 12
+STRIDE = 6
+ITERATIONS = 50
 
 INITIAL_NOISE_FACTOR = 0.5
+
+INIT_PC = 1
+INIT_PC_FACTOR = 0.5
+
+ALGO_SAMPLES = 500
 
 SEED = None
 
@@ -25,34 +30,16 @@ SEED = None
 OUTPUT_RGB_GIF = True
 OUTPUT_LATENT_GIF = False
 
-REWRITE_ALL_TENSOR_FILES = False
-
-dataset_loading_parameters = {
-    "data_set_name" : "chq",
-    "num_samples" : 100,
-    "target_labels" : [],
-    "image_size" : 512,    
-    "normalize" : False,
-}
-
-PCAGMM_SETTINGS = {
-    "PCA_dim": 256,
-    "GMM_comp": 5,
-    "PCA_ITER":100, 
-    "GMM_INIT_ITER":5
-}
-
 @torch.no_grad()
-def extract_centered_patches(img, patchsize):
+def extract_centered_patches(img, patchsize, stride:int = 1):
     """
     Extrait les patches centrés pour chaque pixel de l'image.
     """
-    pad = patchsize // 2
     img_padded = img
-    return F.unfold(img_padded, kernel_size=patchsize, padding=0, stride=STRIDE)
+    return F.unfold(img_padded, kernel_size=patchsize, padding=0, stride=stride)
 
 @torch.no_grad()
-def weighted_patch_average(P_synth, patchsize,C, H, W, mode="standard", device='cpu'):
+def weighted_patch_average(P_synth, patchsize,C, H, W, mode="standard", device='cpu', stride: int = 1):
     
     if mode == "gaussian":
         # Gaussian weight
@@ -76,7 +63,7 @@ def weighted_patch_average(P_synth, patchsize,C, H, W, mode="standard", device='
         w /= w.sum() # Normalization
         w = w.unsqueeze(0).unsqueeze(-1)
 
-    fold_layer = nn.Fold((W, H), kernel_size=patchsize, dilation=1, padding=0, stride=STRIDE)
+    fold_layer = nn.Fold((W, H), kernel_size=patchsize, dilation=1, padding=0, stride=stride)
 
     # Apply weights and fold
     synth = fold_layer(P_synth * w)
@@ -92,6 +79,7 @@ def make_times(n_timestep, schedule='cosine', t0=0):
     '''
     different time discretizations (0 to 1), 'quad' has smaller timesteps near t=0
     '''
+    times = torch.linspace(t0, 1., n_timestep + 1) # default fallback to linear
     if schedule == "linear":
         times = torch.linspace(t0, 1., n_timestep + 1) 
         
@@ -104,11 +92,11 @@ def make_times(n_timestep, schedule='cosine', t0=0):
         )
         times = torch.sin(times).pow(2)
         times = times / times[-1]
-    
+        
     return times
 
 @torch.no_grad()
-def ALGO_LATENT(clean_batch_tensor, initialisation_tensor, patchsize=3, N=50, schedule='linear', device='cpu', mask_weight_type="standard", seed=None):
+def ALGO_LATENT(clean_batch_tensor, initialisation_tensor, patchsize=3, N=50, schedule='linear', device='cpu', mask_weight_type="standard", seed=None, stride:int=1):
     if seed is not None:
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
@@ -117,11 +105,11 @@ def ALGO_LATENT(clean_batch_tensor, initialisation_tensor, patchsize=3, N=50, sc
     N_imgs, C, H, W = clean_batch_tensor.shape
     
     # Extract patches from training data
-    Z = extract_centered_patches(clean_batch_tensor, patchsize)
+    Z = extract_centered_patches(clean_batch_tensor, patchsize, stride=stride)
     x_noise = initialisation_tensor 
     
     # test JUJU todo
-    x_noise = (1. - INITIAL_NOISE_FACTOR ) * x_noise + INITIAL_NOISE_FACTOR * torch.randn_like(x_noise)
+    x_noise = (1. - INITIAL_NOISE_FACTOR ) * x_noise + INITIAL_NOISE_FACTOR * torch.randn_like(x_noise, device=device)
     #t0 = (1. - INITIAL_NOISE_FACTOR )
     t0=0.
     
@@ -135,11 +123,11 @@ def ALGO_LATENT(clean_batch_tensor, initialisation_tensor, patchsize=3, N=50, sc
         t = times[it]
         delta_t = times[it + 1] - t 
 
-        x_patches = extract_centered_patches(x_n1, patchsize) # (1, C*patchsize^2, H*W) 
+        x_patches = extract_centered_patches(x_n1, patchsize, stride=stride) # (1, C*patchsize^2, H*W) 
         
         dists = torch.sum((x_patches - Z * t)**2, dim=1) # (N_imgs, H*W)
 
-        w = torch.softmax(-dists / (2 * ((1. - t) ** 2)), dim=0) # (N_imgs, H*W)  
+        w = torch.softmax(-dists / (2 * ((1. - t) ** 2)), dim=0)# (N_imgs, H*W)  
 
         v = ((Z - x_patches) * w.unsqueeze(1)).sum(0, keepdim=True) / (1. - t)
         # Z : (N_imgs, C*patchsize^2, H*W)  // x_patches (1, C*patchsize^2, H*W) // w (N_imgs, H*W)
@@ -149,9 +137,9 @@ def ALGO_LATENT(clean_batch_tensor, initialisation_tensor, patchsize=3, N=50, sc
         #x_patches_updated = Z[1:2]
         #x_patches_updated *= 1/0.18  
         
-        x_n1 = weighted_patch_average(x_patches_updated, patchsize, C, H, W, mode=mask_weight_type, device=device)
+        x_n1 = weighted_patch_average(x_patches_updated, patchsize, C, H, W, mode=mask_weight_type, device=device, stride=stride)
         
-        
+        yield x_n1.cpu()
         saved_steps.append(x_n1.cpu())
     
     return saved_steps
@@ -206,52 +194,30 @@ def main():
     import matplotlib.pyplot as plt
     import torchvision.transforms.functional as TF
     plt.rcdefaults()
+    plt.rcParams.update(plt.rcParamsDefault)
+
     from algorithms.novelty import compare_ref_stack, tensor_to_numpy_img
     from saver_loader import ls_with_cache_file_tensor, ls_with_cache_file_tensor_dataset, save_dict_hash
-    from pcagmm import PCAGMMFaceGenerator, quick_create_model
+    from pcagmm_test import PCAGMMFaceGenerator, quick_create_model
     torch.cuda.empty_cache()
     device = "cpu" if False else "cuda:0"
-    
-    hash = save_dict_hash(dataset_loading_parameters)
-    
-    #   LOAD TENSORS
-    ################
-    taesd = TAESD(*["ae/taesd/taesd_encoder.pth", "ae/taesd/taesd_decoder.pth"]).to(device)
-    """data_tensor = ls_with_cache_file_tensor_dataset(search_dir="./data/cached_tensors/dataset", 
-                                                    data_dir="./data", force_rewrite=REWRITE_ALL_TENSOR_FILES,
-                                                    dataset_parameters=dataset_loading_parameters, 
-                                                    requirements=[],device=device)
-    
-    
-    encoded_tensor = ls_with_cache_file_tensor(search_dir="./data/cached_tensors/taesd_encoded_dataset", 
-                                               preprocess_tensor_function= lambda x : transform_to_latent_space(x,taesd=taesd, dev=device), 
-                                               tensor_to_save=data_tensor, device=device, 
-                                               requirements=["encoded",hash], force_rewrite=REWRITE_ALL_TENSOR_FILES)
-    print("Clean batches tensor loaded")"""
-    
-    
-    
-    
-    #   LOAD INITIALISATION TENSOR (PCA & GMM IN LATENT SPACE)
-    ##########################################################
 
-    #pca_gmm_tensor = torch.load("./data/cached_tensors/gmm/celebahq_512_lat2.pt",map_location=device)
-    encoded_tensor = torch.load("data/cached_tensors/taesd_encoded_dataset/fully_encoded_celebahq_dataset.pt", weights_only=False, map_location=device)
-    #pca_gmm_tensor = quick_create_model([hash, encoded_tensor], PCAGMM_SETTINGS, seed=SEED).sample(1, return_average=False, seed = SEED)
-    PCAGMM_SETTINGS = {
-    "PCA_dim": 256,
-    "GMM_comp": 1,
-    "PCA_ITER":100, 
-    "GMM_INIT_ITER":1
-    }
+    #   LOAD TENSORS & LOAD INITIALISATION TENSOR (PCA & GMM IN LATENT SPACE)
+    ##########################################################################
+    taesd = TAESD(*["ae/taesd/taesd_encoder.pth", "ae/taesd/taesd_decoder.pth"]).to(device)
     
-    pcagmm_generator = quick_create_model([hash, encoded_tensor], PCAGMM_SETTINGS, seed=None, force_rewrite=False).sample(1, return_average=False, seed = None)
-    
-    x_1=pcagmm_generator
-    
-    print("PCAGMM model created and sampled")
-    
-    
+    encoded_tensor = torch.load("data/cached_tensors/taesd_encoded_dataset/fully_encoded_celebahq_dataset.pt", weights_only=False, map_location="cuda:0")[0:ALGO_SAMPLES]
+
+    pcagmm_generator = PCAGMMFaceGenerator.load(
+        #"./data/cached_tensors/pcagmm/tensor_pcagm_188853386220802287e4d07d96d335828a8fc58ab191c1ee410ec1e48bb0e11c_fbf1f9c98eefe3aae0e9023e99d4406820fffa2b212c2e341f2034296761be54_188853386220802287e4d07d96d335828a8fc58ab191c1ee410ec1e48bb0e11c.pt", # 256 pca, 1000 gmm
+        "./data/cached_tensors/pcagmm/tensor_pcagm_188853386220802287e4d07d96d335828a8fc58ab191c1ee410ec1e48bb0e11c_05a5d1072c9fd93d4050e86c23df981b77820dad47ea26fb0b90e127b382881b_188853386220802287e4d07d96d335828a8fc58ab191c1ee410ec1e48bb0e11c.pt", # 512 pca, 10 gmm
+        device="cpu").sample(1, return_average=False, seed = SEED).to(device)
+    x_1 = pcagmm_generator
+    #nb =  1
+    #n = INIT_PC_FACTOR
+    #x_1= pcagmm_generator.sample_pc(INIT_PC, np.interp(n,[-1.,1.],[*pcagmm_generator.get_pc_distribution(encoded_tensor, nb)[:-1]]),return_average=False)
+    #x_1 = pcagmm_generator.sample_multiple_pcs(pc_weights={5 : -60,3 : 82, 8:-63, 18:38, 39:-18, 7:-59, 0:80},return_average=False)
+    torch.cuda.empty_cache()
     
     print('\x1b[6;30;42m' + 'All tensors loaded with succcess' + '\x1b[0m')
     
@@ -260,7 +226,7 @@ def main():
     #   RUN THE ALGORITHM
     #####################
     
-    results_lat = ALGO_LATENT(encoded_tensor, initialisation_tensor=x_1,patchsize=PATCHSIZE, N=ITERATIONS, device=device, mask_weight_type="",schedule='linear', seed=SEED)
+    results_lat = ALGO_LATENT(encoded_tensor, initialisation_tensor=x_1,patchsize=PATCHSIZE, N=ITERATIONS, device=device, mask_weight_type="linear",schedule='cosine', seed=SEED)
     torch.cuda.empty_cache()
     
     #   PREPARE FOR DISPLAY AND OUTPUT
@@ -274,33 +240,40 @@ def main():
     if OUTPUT_LATENT_GIF : imgs_to_gif_encode(results_lat)
 
     # MATPLOTLIB DISPLAY
-    fig = plt.figure(layout="constrained")
+    fig = plt.figure(layout="constrained", dpi=100)
     axs = fig.subplot_mosaic([
-        ['synth', 'synth', 'init',      'mosaic',       "predom_mosaic",    "coi_mosaic"],
-        ['synth', 'synth', 'patches',   'novelty_dist', "predom",           "coi"       ]
+        ['synth', 'init',      'mosaic',       "predom_mosaic",    "coi_mosaic"],
+        ['sampled_init', 'patches',   'novelty_dist', "predom",           "coi"       ]
     ])
+   
+    quick_decode = lambda x : decode_tensor(x.unsqueeze(0).to(device), taesd).cpu()
+    quick_image_decode = lambda x : tensor_to_numpy_img(quick_decode(x)[0])
+    
     # print(final_result_lat.shape, final_result_rgb.shape)
     axs["synth"].set_title("Result")
     axs["synth"].imshow(TF.to_pil_image(final_result_rgb[0].cpu().detach().clamp(0,1)))
     axs["synth"].axis("off")
+
+    axs["sampled_init"].set_title("Sampled Init")
+    axs["sampled_init"].imshow(quick_image_decode(x_1[0].cpu()))
+    axs["sampled_init"].axis("off")
     
     axs["init"].set_title("Initialisation")
-    axs["init"].imshow(TF.to_pil_image(decode_tensor(x_1.to(device), taesd).cpu()[0].detach().clamp(0,1)))
+    axs["init"].imshow(quick_image_decode(results_lat[0][0].cpu()))
     axs["init"].axis("off")
 
     comparison = compare_ref_stack(
         final_result_lat[0].to(device), 
         encoded_tensor.to(device),
-        threshold=0.2, 
+        threshold=0.9, 
         distance_gradient=True,
         spatial_weights=None,
         smooth_kernel=PATCHSIZE+1
     )
     
-    def quick_decode(x):
-        return decode_tensor(x.unsqueeze(0).to(device), taesd).cpu()
+    
 
-    quick_image_decode = lambda x : tensor_to_numpy_img(quick_decode(x)[0])
+    
 
     axs["patches"].set_title("Patch Regions")
     axs["patches"].imshow(tensor_to_numpy_img(comparison[0]))

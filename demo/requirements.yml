@@ -1,0 +1,13 @@
+name: nifty
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - torchvision
+  - pillow
+  - tqdm
+  - numpy
+  - matplotlib
+  - gradio
+  - torchgmm

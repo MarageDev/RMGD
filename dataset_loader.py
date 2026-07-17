@@ -180,10 +180,11 @@ def load_jpg_folder(root='./data', num_samples=None, image_size=None, **kwargs):
 
 import os
 import torch
-import torchvision.io as tv_io
+from torchvision.io import decode_image
 import torchvision.transforms.functional as TF
 
 def load_jpg_folder_torch(root='./data', num_samples=None, image_size=None, normalize=False,**kwargs):
+    from tqdm import tqdm
     # Extract all jpg files and sort them alphabetically
     all_files = sorted([f for f in os.listdir(root) if f.lower().endswith(('.jpg', '.jpeg'))])
     
@@ -194,10 +195,10 @@ def load_jpg_folder_torch(root='./data', num_samples=None, image_size=None, norm
     images = []
     
     # Load, transform, and collect
-    for f_name in all_files:
+    for f_name in tqdm(all_files, "Searching through celeba", total = len(all_files), miniters=1):
         file_path = os.path.join(root, f_name)
         try:
-            img_tensor = tv_io.decode_image(file_path, mode="RGB")
+            img_tensor = decode_image(file_path, mode="RGB")
 
             if image_size is not None: # resize if specified
                 img_tensor = TF.resize(img_tensor, image_size, antialias=True)
@@ -211,9 +212,10 @@ def load_jpg_folder_torch(root='./data', num_samples=None, image_size=None, norm
         raise ValueError(f"No JPG images found in {root}")
 
     batch_tensor = torch.stack(images)
+    batch_tensor = torch.clamp(batch_tensor/255.,0.,1.)
     
-    if normalize : batch_tensor = (batch_tensor / 255.0) * 2. - 1.
-    
+    print("max")
+    print(batch_tensor.max())
     return batch_tensor.to('cpu')
 
 import io
@@ -239,12 +241,10 @@ def load_parquet(root="./data", num_samples=None, image_size=None, normalize=Fal
             transforms.Resize(image_size), 
             transforms.CenterCrop(image_size),
             transforms.ToTensor(),
-            #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) # TODO
         ])
     else : 
         transform = transforms.Compose([
             transforms.ToTensor(),
-            #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
     if normalize : transform = transforms.Compose([*transform.transforms, transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
     images = []
@@ -269,7 +269,7 @@ def load_parquet(root="./data", num_samples=None, image_size=None, normalize=Fal
     return torch.stack(images).to('cpu')
 
 @torch.no_grad()
-def load_parquet_attr(root="./data", num_samples=None, image_size=None, **kwargs):
+def load_parquet_attr(root="./data", num_samples=None, image_size=None, normalize=False,**kwargs):
     """
     - root : Can either be a filepath or a URL (based on doc but most of the time there're too much requests so it fails)
     """
@@ -287,15 +287,14 @@ def load_parquet_attr(root="./data", num_samples=None, image_size=None, **kwargs
             transforms.Resize(image_size), 
             transforms.CenterCrop(image_size),
             transforms.ToTensor(),
-            #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) # TODO
         ])
     else : 
         transform = transforms.Compose([
             transforms.ToTensor(),
-            #transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
         
-        
+    if normalize : transform = transforms.Compose([*transform.transforms, transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+
     
     images = []
 

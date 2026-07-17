@@ -1,10 +1,9 @@
 import torch
 from torch import Tensor
 import torch.nn.functional as F
-from tqdm import tqdm
 import numpy as np
 import colorsys
-import matplotlib.pyplot as plt
+
 def get_color_range(ref_img_nb, end=200):
     # Handle the edge case where 0 or 1 unique patches are found
     if ref_img_nb <= 1:
@@ -160,58 +159,3 @@ def compare_ref_stack(ref_t: torch.Tensor, comp_t: torch.Tensor, threshold: floa
 
     return (
         final, mosaic_final.unsqueeze(0), comp_t[predominant_tensor_idx].unsqueeze(0), mosaic_predom.unsqueeze(0), predom_coi_image.unsqueeze(0), mosaic_coi_predom.unsqueeze(0), normalized_distances.unsqueeze(0))
-    #       0       1           2                               3               4                       5               6
-
-# if __name__ == "__main__":
-#     data_tensor = torch.load("./data/cached_tensors/dataset/tensor_dataset_4f4934b05986be2050108a794ee35105e817d299f3981f0327a61b052bd6c589.pt", map_location='cuda:0')
-
-#     fig = plt.figure(layout="constrained")
-#     layout = """
-#     SSCPI
-#     SSMDO
-#     """
-    
-#     axs = fig.subplot_mosaic(mosaic=layout)
-#     ref_tensor = img_to_tensor("novelty_test.jpg").to('cuda:0')
-#     comp = compare_ref_stack(ref_tensor,data_tensor,
-#                              smooth_kernel=5,threshold=0.2, 
-#                              distance_gradient=True, spatial_weights=None)
-    
-#     axs["S"].imshow(tensor_to_numpy_img((ref_tensor +1)/2)) # synthesis
-    
-#     axs["C"].imshow(tensor_to_numpy_img(comp[0])) # patches
-    
-#     axs["M"].imshow(tensor_to_numpy_img(comp[1])) # mosaic of ref images
-#     axs["P"].imshow(tensor_to_numpy_img(comp[2])) # predominant image
-#     axs["D"].imshow(tensor_to_numpy_img(comp[3])) # predom mosaic
-#     axs["I"].imshow(tensor_to_numpy_img(comp[4])) # predom coi image
-#     axs["O"].imshow(tensor_to_numpy_img(comp[5])) # predom coi mosaic
-#     plt.show()
-
-
-if __name__ == "__main__":
-    data_tensor = torch.load("./data/cached_tensors/taesd_encoded_dataset/tensor_encoded_92d3e63cfd4c0117aa03bb6e03b2377ea0ca0069f548774de625a006b970a2b5.pt", map_location='cuda:0')
-    lat_res = torch.load("./lat_res.pt", "cuda:0")[0]
-    print(lat_res.shape)
-    fig = plt.figure(layout="constrained")
-    layout = """
-    SSCPI
-    SSMDO
-    """
-    
-    axs = fig.subplot_mosaic(mosaic=layout)
-    
-    comp = compare_ref_stack(lat_res,data_tensor,
-                             smooth_kernel=5,threshold=0.2, 
-                             distance_gradient=True, spatial_weights=None)
-
-    axs["S"].imshow(tensor_to_numpy_img((lat_res +1)/2)) # synthesis
-    
-    axs["C"].imshow(tensor_to_numpy_img(comp[0])) # patches
-
-    axs["M"].imshow(tensor_to_numpy_img(comp[1])) # mosaic of ref images
-    axs["P"].imshow(tensor_to_numpy_img(comp[2])) # predominant image
-    axs["D"].imshow(tensor_to_numpy_img(comp[3])) # predom mosaic
-    axs["I"].imshow(tensor_to_numpy_img(comp[4])) # predom coi image
-    axs["O"].imshow(tensor_to_numpy_img(comp[5])) # predom coi mosaic
-    plt.show()

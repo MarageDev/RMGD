@@ -1,0 +1,8 @@
+gradio
+numpy
+matplotlib
+torchvision
+pillow
+tqdm
+torchgmm @ git+https://github.com/CSOgroup/torchgmm.git@main
+typing

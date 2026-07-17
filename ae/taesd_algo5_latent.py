@@ -160,7 +160,6 @@ def imgs_to_gif_encode(imgs=None):
 def decode_tensor(tensor:torch.TensorType, taesd:TAESD):
     return taesd.decoder(tensor).clamp(0, 1)
 
-#with torch.no_grad() : # todo
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import torchvision.transforms.functional as TF

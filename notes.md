@@ -18,11 +18,21 @@
 
 
 06/07
-- visualisation dans l'espace latent
+- ~~visualisation dans l'espace latent~~
+- ~~ENVOYER LE MAIL POUR LA DEMO NIFTY (en remerciant pour le temps consacré aux tests ...)~~
+- ~~voir pour huggingface~~
+
 - faire la pca et gmm sur tout le dataset
-- charger une sous partie en temps réel pour que ça soit rapide
 - visualiser les centroids des gmm
-- regulariser les matrices de covariance - réduire pour pas avoir de bruit avec du low rank (gmm ++ ) -> acp pour enlever les hautes frequences
-- ajouter un bruit correlé à partir du datasert à l'initialisation du gmm
-- envoyer le mail pour la demo nifty
-- voir pour huggingface
+- ~~display single pca component distribution and automatically get a min,max, mean~~
+
+- ajouter un bruit correlé à partir du dataset à l'initialisation du gmm
+
+- charger une sous partie en temps réel pour que ça soit rapide
+
+- regulariser les matrices de covariance - réduire pour pas avoir de bruit avec du low rank (augmenter le nombre du gmm ) -> PCA pour enlever les hautes frequences
+
+
+
+09/07
+- Tester la différence entre Sklearn et TorchGMM pour voir si y'a pas un probllème et augmenter le nombre de GMM (5 si possible)

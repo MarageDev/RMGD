@@ -104,7 +104,7 @@ def algo5(D_train, initial_noise,patchsize=3, N=50, schedule='linear', device='c
     # Initialize with Gaussian noise
     #x_noise = torch.randn(1, C, H, W, device=device)
     #x_noise = get_gmm_noise(D_train.cpu()).to(device).unsqueeze(0)
-    x_noise = initial_noise # TODO works better with (...+1)/2
+    x_noise = initial_noise
     
     x_n1 = x_noise.clone()
     
