@@ -213,7 +213,7 @@ def load_multi_res_tensors(params:dict, scales:int=2, device='cpu') -> list:
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from data_tensor_loader import load_data_to_tensor
+    from others.data_tensor_loader import load_data_to_tensor
     
     force_reload_tensor = False
     tensors = []
