@@ -1,6 +1,20 @@
 # RMGD
 Réinterprétation des modèles génératifs de diffusion
 
+## Demo
+The repository contains a general demo file using the open-source Python package Gradio to render the user interface. The main demo file is located under : `demo/app.py`.
+You can also find a demo hosted on [Hugging Face](https://huggingface.co/spaces/Marage/Nifty) which contains a demo an algorithm in this repository as well as one of the [NIFTY algorithm](https://github.com/PierrickCh/Nifty).
+
+### How to run
+To launch the demo, start the python script in the virtual environment :  
+```shell
+python ./demo/app.py
+```
+or use gradio hot reload mode (if you plan to edit the code) with 
+```shell
+gradio ./Demos/app.py
+```
+### How to load custom dataset
 
 # Références
 ```
