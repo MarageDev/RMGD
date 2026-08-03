@@ -1,6 +1,5 @@
-# RMGD
-Réinterprétation des modèles génératifs de diffusion
-Latent patch based flow matching for image batches
+# LPFM
+Latent patch based flow matching for image batches.
 
 ## Content
 The algorithms under `./algorithms` are python scripts of algorithms described in [1] and flow matching variants with other features. The algorithm were developped in a linear way, so each version number is almost always equal to its predecessor with some improvements or new features.
